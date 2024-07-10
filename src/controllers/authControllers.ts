@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import User from '../models/userModel';
-import { generateOTP } from '../utils/otpGenerator';
+import { generateOTP, generateSixDigitCode } from '../utils/otpGenerator';
 import { sendOTPEmail, sendResetPasswordEmail} from '../services/emailService';
 import { comparePasswords } from '../utils/passwordUtils';
 
@@ -130,6 +130,7 @@ export const resendOTP = async (req: Request, res: Response) => {
   }
 };
 
+
 export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { email } = req.body;
@@ -139,11 +140,32 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
       return res.status(404).json({ data: 'User not found', msg: "Failure" });
     }
 
-    const resetToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, { expiresIn: '15m' });
+    const resetCode = generateSixDigitCode();
+    const resetCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // Code expires in 15 minutes
 
-    await sendResetPasswordEmail(email, resetToken);
+    user.resetCode = resetCode;
+    user.resetCodeExpires = resetCodeExpires;
+    await user.save();
 
-    res.status(200).json({ data: 'Reset token sent to email.', msg: "Success" });
+    await sendResetPasswordEmail(email, resetCode);
+
+    res.status(200).json({ data: 'Reset code sent to email.', msg: "Success" });
+  } catch (error) {
+    console.log(`error: ${error.message}`);
+    res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+  }
+};
+
+export const verifyResetCode = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { resetCode } = req.body;
+
+    const user = await User.findOne({ resetCode, resetCodeExpires: { $gt: new Date() } });
+    if (!user) {
+      return res.status(400).json({ data: 'Invalid or expired reset code', msg: "Failure" });
+    }
+
+    res.status(200).json({ data: 'Reset code verified', email: user.email, msg: "Success" });
   } catch (error) {
     console.log(`error: ${error.message}`);
     res.status(500).json({ data: 'Internal server error', msg: "Failure" });
@@ -152,23 +174,18 @@ export const forgotPassword = async (req: Request, res: Response, next: NextFunc
 
 export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { resetToken, newPassword } = req.body;
+    const { email, newPassword } = req.body;
 
-    let decoded;
-    try {
-      decoded = jwt.verify(resetToken, process.env.JWT_SECRET!) as { id: string };
-    } catch (error) {
-      return res.status(400).json({ data: 'Invalid or expired token', msg: "Failure" });
-    }
-
-    const user = await User.findById(decoded.id);
+    const user = await User.findOne({ email, resetCode: { $exists: true }, resetCodeExpires: { $gt: new Date() } });
     if (!user) {
-      return res.status(400).json({ data: 'User not found', msg: "Failure" });
+      return res.status(400).json({ data: 'Invalid or expired reset code', msg: "Failure" });
     }
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
     user.password = hashedPassword;
+    user.resetCode = undefined;
+    user.resetCodeExpires = undefined;
     await user.save();
 
     res.status(200).json({ data: 'Password reset successfully', msg: "Success" });

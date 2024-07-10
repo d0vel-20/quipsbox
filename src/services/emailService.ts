@@ -40,7 +40,7 @@ export const sendOTPEmail = (email: string, otp: string): Promise<boolean> => {
 
 }
 
-export const sendResetPasswordEmail = (email: string, resetToken: string): Promise<boolean> => {
+export const sendResetPasswordEmail = (email: string, resetCode: string): Promise<boolean> => {
     return new Promise((resolve, reject) => {
       const transporter = nodemailer.createTransport({
         host: HOST,
@@ -51,13 +51,11 @@ export const sendResetPasswordEmail = (email: string, resetToken: string): Promi
         },
       });
   
-      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-  
       const mailOptions = {
         from: USER,
         to: email,
         subject: 'Password Reset Request',
-        text: `You requested a password reset. Please click the following link to reset your password: ${resetUrl}. This link expires in 15 minutes.`,
+        text: `You requested a password reset. Your reset code is ${resetCode}. This code expires in 15 minutes.`,
       };
   
       transporter.sendMail(mailOptions, function (error, info) {

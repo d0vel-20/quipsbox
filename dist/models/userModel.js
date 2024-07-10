@@ -7,7 +7,9 @@ const userSchema = new mongoose_1.Schema({
     password: { type: String, required: true },
     isVerified: { type: Boolean, default: false },
     otp: { type: String },
-    otpExpires: { type: Date }
+    otpExpires: { type: Date },
+    resetCode: { type: String },
+    resetCodeExpires: { type: Date },
 });
 const User = (0, mongoose_1.model)('User', userSchema);
 exports.default = User;

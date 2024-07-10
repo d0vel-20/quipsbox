@@ -7,6 +7,8 @@ interface IUser {
   isVerified: boolean;
   otp: string;
   otpExpires: Date;
+  resetCode?: string;
+  resetCodeExpires?: Date;
 }
 
 const userSchema = new Schema<IUser>({
@@ -15,7 +17,9 @@ const userSchema = new Schema<IUser>({
   password: { type: String, required: true },
   isVerified: { type: Boolean, default: false },
   otp: { type: String },
-  otpExpires: { type: Date }
+  otpExpires: { type: Date },
+  resetCode: { type: String },
+  resetCodeExpires: { type: Date },
 });
 
 const User = model<IUser>('User', userSchema);

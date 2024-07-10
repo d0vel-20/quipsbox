@@ -42,7 +42,7 @@ const sendOTPEmail = (email, otp) => {
     });
 };
 exports.sendOTPEmail = sendOTPEmail;
-const sendResetPasswordEmail = (email, resetToken) => {
+const sendResetPasswordEmail = (email, resetCode) => {
     return new Promise((resolve, reject) => {
         const transporter = nodemailer_1.default.createTransport({
             host: HOST,
@@ -52,12 +52,11 @@ const sendResetPasswordEmail = (email, resetToken) => {
                 pass: PASS,
             },
         });
-        const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
         const mailOptions = {
             from: USER,
             to: email,
             subject: 'Password Reset Request',
-            text: `You requested a password reset. Please click the following link to reset your password: ${resetUrl}. This link expires in 15 minutes.`,
+            text: `You requested a password reset. Your reset code is ${resetCode}. This code expires in 15 minutes.`,
         };
         transporter.sendMail(mailOptions, function (error, info) {
             if (error) {

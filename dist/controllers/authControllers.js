@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.forgotPassword = exports.resetPassword = exports.resendOTP = exports.login = exports.verifyOTP = exports.register = void 0;
+exports.resetPassword = exports.verifyResetCode = exports.forgotPassword = exports.resendOTP = exports.login = exports.verifyOTP = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const userModel_1 = __importDefault(require("../models/userModel"));
@@ -109,22 +109,53 @@ const resendOTP = async (req, res) => {
     }
 };
 exports.resendOTP = resendOTP;
+const forgotPassword = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+        const user = await userModel_1.default.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ data: 'User not found', msg: "Failure" });
+        }
+        const resetCode = (0, otpGenerator_1.generateSixDigitCode)();
+        const resetCodeExpires = new Date(Date.now() + 15 * 60 * 1000); // Code expires in 15 minutes
+        user.resetCode = resetCode;
+        user.resetCodeExpires = resetCodeExpires;
+        await user.save();
+        await (0, emailService_1.sendResetPasswordEmail)(email, resetCode);
+        res.status(200).json({ data: 'Reset code sent to email.', msg: "Success" });
+    }
+    catch (error) {
+        console.log(`error: ${error.message}`);
+        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+    }
+};
+exports.forgotPassword = forgotPassword;
+const verifyResetCode = async (req, res, next) => {
+    try {
+        const { resetCode } = req.body;
+        const user = await userModel_1.default.findOne({ resetCode, resetCodeExpires: { $gt: new Date() } });
+        if (!user) {
+            return res.status(400).json({ data: 'Invalid or expired reset code', msg: "Failure" });
+        }
+        res.status(200).json({ data: 'Reset code verified', email: user.email, msg: "Success" });
+    }
+    catch (error) {
+        console.log(`error: ${error.message}`);
+        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+    }
+};
+exports.verifyResetCode = verifyResetCode;
 const resetPassword = async (req, res, next) => {
     try {
-        const { resetToken, newPassword } = req.body;
-        let decoded;
-        try {
-            decoded = jsonwebtoken_1.default.verify(resetToken, process.env.JWT_SECRET);
-        }
-        catch (error) {
-            return res.status(400).json({ data: 'Invalid or expired token', msg: "Failure" });
-        }
-        const user = await userModel_1.default.findById(decoded.id);
+        const { email, newPassword } = req.body;
+        const user = await userModel_1.default.findOne({ email, resetCode: { $exists: true }, resetCodeExpires: { $gt: new Date() } });
         if (!user) {
-            return res.status(400).json({ data: 'User not found', msg: "Failure" });
+            return res.status(400).json({ data: 'Invalid or expired reset code', msg: "Failure" });
         }
         const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
         user.password = hashedPassword;
+        user.resetCode = undefined;
+        user.resetCodeExpires = undefined;
         await user.save();
         res.status(200).json({ data: 'Password reset successfully', msg: "Success" });
     }
@@ -134,21 +165,4 @@ const resetPassword = async (req, res, next) => {
     }
 };
 exports.resetPassword = resetPassword;
-const forgotPassword = async (req, res, next) => {
-    try {
-        const { email } = req.body;
-        const user = await userModel_1.default.findOne({ email });
-        if (!user) {
-            return res.status(404).json({ data: 'User not found', msg: "Failure" });
-        }
-        const resetToken = jsonwebtoken_1.default.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '15m' });
-        await (0, emailService_1.sendResetPasswordEmail)(email, resetToken);
-        res.status(200).json({ data: 'Reset token sent to email.', msg: "Success" });
-    }
-    catch (error) {
-        console.log(`error: ${error.message}`);
-        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
-    }
-};
-exports.forgotPassword = forgotPassword;
 //# sourceMappingURL=authControllers.js.map
