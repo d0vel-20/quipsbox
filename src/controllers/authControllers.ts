@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import User from '../models/userModel';
 import { generateOTP } from '../utils/otpGenerator';
-import { sendOTPEmail,} from '../services/emailService';
+import { sendOTPEmail, sendResetPasswordEmail} from '../services/emailService';
 import { comparePasswords } from '../utils/passwordUtils';
 
 
@@ -129,4 +129,54 @@ export const resendOTP = async (req: Request, res: Response) => {
     res.status(500).json({ msg: 'Server error' });
   }
 };
+
+export const forgotPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ data: 'User not found', msg: "Failure" });
+    }
+
+    const resetToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET!, { expiresIn: '15m' });
+
+    await sendResetPasswordEmail(email, resetToken);
+
+    res.status(200).json({ data: 'Reset token sent to email.', msg: "Success" });
+  } catch (error) {
+    console.log(`error: ${error.message}`);
+    res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { resetToken, newPassword } = req.body;
+
+    let decoded;
+    try {
+      decoded = jwt.verify(resetToken, process.env.JWT_SECRET!) as { id: string };
+    } catch (error) {
+      return res.status(400).json({ data: 'Invalid or expired token', msg: "Failure" });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(400).json({ data: 'User not found', msg: "Failure" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    user.password = hashedPassword;
+    await user.save();
+
+    res.status(200).json({ data: 'Password reset successfully', msg: "Success" });
+  } catch (error) {
+    console.log(`error: ${error.message}`);
+    res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+  }
+};
+
+
 
