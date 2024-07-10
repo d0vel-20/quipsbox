@@ -39,3 +39,4 @@ export const sendOTPEmail = (email: string, otp: string): Promise<boolean> => {
   });
 
 }
+

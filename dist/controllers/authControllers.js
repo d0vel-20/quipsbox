@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.login = exports.verifyOTP = exports.register = void 0;
+exports.resetPassword = exports.forgotPassword = exports.resendOTP = exports.login = exports.verifyOTP = exports.register = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const userModel_1 = __importDefault(require("../models/userModel"));
@@ -91,4 +91,79 @@ const login = async (req, res, next) => {
     }
 };
 exports.login = login;
+const resendOTP = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+        const user = await userModel_1.default.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ data: 'User not found', msg: "Failure" });
+        }
+        if (user.isVerified) {
+            return res.status(400).json({ data: 'User is already verified', msg: "Failure" });
+        }
+        const otp = (0, otpGenerator_1.generateOTP)();
+        const otpExpires = new Date(Date.now() + 15 * 60 * 1000); // OTP expires in 15 minutes
+        user.otp = otp;
+        user.otpExpires = otpExpires;
+        await user.save();
+        await (0, emailService_1.sendOTPEmail)(email, otp);
+        res.status(200).json({ data: 'New OTP sent to email', msg: "Success" });
+    }
+    catch (error) {
+        console.log(`error: ${error.message}`);
+        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+    }
+};
+exports.resendOTP = resendOTP;
+// forgot password
+const forgotPassword = async (req, res, next) => {
+    try {
+        const { email } = req.body;
+        const user = await userModel_1.default.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ data: 'User not found', msg: "Failure" });
+        }
+        const resetToken = jsonwebtoken_1.default.sign({ id: user._id }, process.env.JWT_SECRET, {
+            expiresIn: '1h',
+        });
+        const resetPasswordUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+        await (0, emailService_1.sendResetPasswordEmail)(email, resetPasswordUrl);
+        res.status(200).json({ data: 'Password reset link sent to email', msg: "Success" });
+    }
+    catch (error) {
+        console.log(`error: ${error.message}`);
+        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+    }
+};
+exports.forgotPassword = forgotPassword;
+// reset password
+const resetPassword = async (req, res, next) => {
+    try {
+        const { token, newPassword } = req.body;
+        let decoded;
+        try {
+            decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        }
+        catch (error) {
+            return res.status(400).json({ data: 'Invalid or expired token', msg: "Failure" });
+        }
+        const user = await userModel_1.default.findById(decoded.id);
+        if (!user) {
+            return res.status(404).json({ data: 'User not found', msg: "Failure" });
+        }
+        const isSamePassword = await (0, passwordUtils_1.comparePasswords)(newPassword, user.password);
+        if (isSamePassword) {
+            return res.status(400).json({ data: 'New password cannot be the same as the old password', msg: "Failure" });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(newPassword, 10);
+        user.password = hashedPassword;
+        await user.save();
+        res.status(200).json({ data: 'Password reset successful', msg: "Success" });
+    }
+    catch (error) {
+        console.log(`error: ${error.message}`);
+        res.status(500).json({ data: 'Internal server error', msg: "Failure" });
+    }
+};
+exports.resetPassword = resetPassword;
 //# sourceMappingURL=authControllers.js.map

@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import { Request, Response, NextFunction } from 'express';
 import User from '../models/userModel';
 import { generateOTP } from '../utils/otpGenerator';
-import { sendOTPEmail } from '../services/emailService';
+import { sendOTPEmail,} from '../services/emailService';
 import { comparePasswords } from '../utils/passwordUtils';
 
 
@@ -106,3 +106,27 @@ export const login = async (req: Request, res: Response, next: NextFunction) => 
     res.status(500).json({ data: 'Internal server error', msg: "Failure" });
   }
 };
+
+
+
+export const resendOTP = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ msg: 'User not found' });
+
+    const otp = generateOTP();
+    user.otp = otp;
+    user.otpExpires = new Date(Date.now() + 10 * 60 * 1000); // OTP expires in 10 minutes
+
+    await user.save();
+
+    await sendOTPEmail(email, `Your OTP code is ${otp}`);
+
+    res.json({ msg: 'OTP sent successfully' });
+  } catch (error) {
+    res.status(500).json({ msg: 'Server error' });
+  }
+};
+
